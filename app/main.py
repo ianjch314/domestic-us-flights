@@ -22,8 +22,20 @@ def generate_plane_row(faker):
     
     return [registration, fleet[1], fleet[2]]
 
+def generate_passenger_row(faker):
+    first_name = faker.first_name()
+    last_name = faker.last_name()
+    email = faker.email()
+    phone_number = faker.phone_number()
+    
+    return [first_name, last_name, email, phone_number]
+
 if __name__ == '__main__':
     faker = Faker()
     for _ in range(10):
         row = generate_plane_row(faker)
         print(f'registration: {row[0]}, type: {row[1]}, capacity: {row[2]}')
+    
+    for _ in range(10):
+        row = generate_passenger_row(faker)
+        print(f'first_name: {row[0]}, last_name: {row[1]}, email: {row[2]}, phone: {row[3]}')

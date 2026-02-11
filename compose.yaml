@@ -8,6 +8,7 @@ services:
       POSTGRES_PASSWORD: pgpass
       POSTGRES_DB: pgdb
     volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
       - db_data:/var/lib/postgresql
   
   app:

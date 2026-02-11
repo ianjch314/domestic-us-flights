@@ -1,6 +1,7 @@
 from faker import Faker
 import random
 from datetime import timedelta
+import psycopg2
 
 FLEET_DATA = [
     ('AA', 'Boeing 737-800', 172, 'AA'),
@@ -130,10 +131,11 @@ FLIGHT_TIME_STATISTIC = {
     ('MCO', 'JFK'): {'mean': 160, 'std': 18},
     ('MCO', 'SFO'): {'mean': 365, 'std': 30},
     ('MCO', 'LAS'): {'mean': 315, 'std': 25},
-    ('MCO', 'SEA'): {'mean': 385, 'std': 32},
-}
+    ('MCO', 'SEA'): {'mean': 385, 'std': 32},}
 
-def generate_plane_row(faker):
+faker = Faker()
+
+def generate_plane_row():
     fleet = random.choice(FLEET_DATA)
     registration = f'N{faker.bothify(text='%##')}{fleet[3]}'
     fleet_type = fleet[1]
@@ -141,7 +143,7 @@ def generate_plane_row(faker):
     
     return [registration, fleet_type, capacity]
 
-def generate_passenger_row(faker):
+def generate_passenger_row():
     first_name = faker.first_name()
     last_name = faker.last_name()
     email = faker.email()
@@ -149,35 +151,86 @@ def generate_passenger_row(faker):
     
     return [first_name, last_name, email, phone]
 
-def generate_flight_row(faker, airline_code, departure_start_date='now'):
-    flight_number = f'{airline_code}{faker.bothify(text='@!!!')}'
+def generate_flight_row(plane_registration, airline_code, departure_start_date='now'):
+    flight_number = f'{airline_code}{faker.bothify(text='%!!!')}'
 
     departure_airport = random.choice(DOMESTIC_AIRPORT_CODE)
     arrival_airport = random.choice([
         code for code in DOMESTIC_AIRPORT_CODE if code != departure_airport])
 
-    scheduled_departure = faker.date_time_between(start_date=departure_start_date, end_date='+1d')
-
     mean_flight_time = FLIGHT_TIME_STATISTIC[(departure_airport, arrival_airport)]['mean']
     std_flight_time = FLIGHT_TIME_STATISTIC[(departure_airport, arrival_airport)]['std']
-
     estimated_flight_time = random.gauss(mean_flight_time, std_flight_time)
     assert estimated_flight_time > 0, 'Estimated flight time must be positive'
 
+    scheduled_departure = faker.date_time_between(start_date=departure_start_date, end_date='+1d')
     scheduled_arrival = scheduled_departure + timedelta(minutes=estimated_flight_time)
 
-    return [flight_number, departure_airport, arrival_airport, scheduled_departure, scheduled_arrival]
+    return [flight_number, plane_registration, departure_airport, arrival_airport, scheduled_departure, scheduled_arrival]
+
+# Database connection
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(
+            host='db',
+            database='pgdb',
+            user='pguser',
+            password='pgpass',
+            port='5432'
+        )
+        return conn
+    except (Exception, psycopg2.Error) as error:
+        print(f'Error while connecting to Postgres database: {error}')
+        return None
+
+def insert_planes(conn, count=10):
+    registrations = []
+    with conn.cursor() as cur:
+        for _ in range(count):
+            row = generate_plane_row()
+            cur.execute(
+                'INSERT INTO planes (registration, fleet_type, capacity) VALUES (%s, %s, %s) ON CONFLICT (registration) DO NOTHING',
+                row
+            )
+            registrations.append(row[0])
+    conn.commit()
+    print(f'Inserted {count} planes.')
+    return registrations
+
+def insert_passengers(conn, count=50):
+    with conn.cursor() as cur:
+        for _ in range(count):
+            row = generate_passenger_row()
+            cur.execute(
+                'INSERT INTO passengers (first_name, last_name, email, phone) VALUES (%s, %s, %s, %s) ON CONFLICT (email) DO NOTHING',
+                row
+            )
+    conn.commit()
+    print(f'Inserted {count} passengers.')
+
+def insert_flights(conn, registrations, count=20):
+    with conn.cursor() as cur:
+        for _ in range(count):
+            reg = random.choice(registrations)
+            airline_code = reg[-2:]
+            row = generate_flight_row(reg, airline_code)
+            cur.execute(
+                'INSERT INTO flights (flight_number, plane_registration, departure_airport, arrival_airport, scheduled_departure, scheduled_arrival) VALUES (%s, %s, %s, %s, %s, %s)',
+                row
+            )
+    conn.commit()
+    print(f'Inserted {count} flights.')
 
 if __name__ == '__main__':
-    faker = Faker()
-    for _ in range(10):
-        row = generate_plane_row(faker)
-        print(f'registration: {row[0]}, fleet_type: {row[1]}, capacity: {row[2]}')
-    
-    for _ in range(10):
-        row = generate_passenger_row(faker)
-        print(f'first_name: {row[0]}, last_name: {row[1]}, email: {row[2]}, phone: {row[3]}')
-    
-    for i in range(10):
-        row = generate_flight_row(faker, 'AA', f'+{i}d')
-        print(f'flight_number: {row[0]}, departure_airport: {row[1]}, arrival_airport: {row[2]}, scheduled_departure: {row[3]}, scheduled_arrival: {row[4]}')
+    connection = get_db_connection()
+    if connection:
+        print('Connected to database successfully.')
+        
+        plane_regs = insert_planes(connection, 15)
+        insert_passengers(connection, 100)
+        insert_flights(connection, plane_regs, 50)
+        
+        connection.close()
+        print('Database connection closed.')
+    else:
+        print('Failed to connect to database.')

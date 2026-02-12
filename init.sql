@@ -22,5 +22,21 @@ CREATE TABLE flights (
     scheduled_arrival TIMESTAMP NOT NULL,
 
     FOREIGN KEY (plane_registration)
-    REFERENCES planes (registration)
+    REFERENCES planes (registration),
+
+    UNIQUE (flight_number, scheduled_departure)
+);
+
+CREATE TABLE tickets (
+    ticket_id SERIAL PRIMARY KEY,
+    passenger_id INT NOT NULL,
+    flight_number VARCHAR(255) NOT NULL,
+    scheduled_departure TIMESTAMP NOT NULL,
+    seat_number VARCHAR(255) NOT NULL,
+
+    FOREIGN KEY (passenger_id)
+    REFERENCES passengers (passenger_id),
+
+    FOREIGN KEY (flight_number, scheduled_departure)
+    REFERENCES flights (flight_number, scheduled_departure)
 );
